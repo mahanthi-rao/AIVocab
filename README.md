@@ -4,10 +4,11 @@ A single-page web app to practice English vocabulary for the SSC CGL 2026 exam.
 Type a word (e.g. `slipshod`), pick a category, and use Google Gemini to either
 generate study notes or an interactive practice test.
 
-- **Frontend:** React + Vite
-- **Backend:** Cloudflare Pages Function (`functions/api/generate.js`) that proxies
-  Gemini so your API key never reaches the browser
-- **Hosting:** Cloudflare Pages, deployed from GitHub
+- **Frontend:** React + Vite (built to `dist/`, served as Cloudflare static assets)
+- **Backend:** a Cloudflare Worker (`worker/index.js`) that handles `/api/generate`
+  and proxies Gemini, so your API key never reaches the browser. The shared handler
+  lives in `src/server/generate.js` (also re-used by a Pages Function wrapper).
+- **Hosting:** Cloudflare Workers (with static assets), deployed from GitHub
 
 ## Categories
 
@@ -17,10 +18,10 @@ Fixed Prepositions, Phrasal Verbs.
 ## How it works
 
 ```
-Browser (React)  ->  POST /api/generate  ->  Pages Function  ->  Gemini API
+Browser (React)  ->  POST /api/generate  ->  Cloudflare Worker  ->  Gemini API
 ```
 
-The function reads `GEMINI_API_KEY` from the environment (a Cloudflare secret in
+The Worker reads `GEMINI_API_KEY` from the environment (a Cloudflare secret in
 production, `.dev.vars` locally) and returns structured JSON that the UI renders
 as study cards or an interactive MCQ test.
 
@@ -47,25 +48,28 @@ as study cards or an interactive MCQ test.
 3. Run the full stack (UI + API) with Wrangler:
 
    ```bash
-   npm run pages:dev
+   npm start
    ```
 
-   This builds the app and serves it (with the `/api/generate` function) at the
-   URL Wrangler prints (usually `http://127.0.0.1:8788`).
+   This builds the app and serves it (with the `/api/generate` Worker) at the
+   URL Wrangler prints (usually `http://127.0.0.1:8787`).
 
 ### UI-only hot reload (optional)
 
 For fast UI iteration you can run Vite and Wrangler side by side:
 
 ```bash
-# terminal 1 - serves the API on port 8788
-npx wrangler pages dev dist --port 8788
+# terminal 1 - serves the Worker + assets on port 8787
+npx wrangler dev --port 8787
 
-# terminal 2 - Vite dev server; /api is proxied to 8788 (see vite.config.js)
+# terminal 2 - Vite dev server; /api is proxied to 8787 (see vite.config.js)
 npm run dev
 ```
 
-## Deploy to Cloudflare Pages (via GitHub)
+## Deploy to Cloudflare (via GitHub)
+
+Configuration lives in [`wrangler.jsonc`](wrangler.jsonc): it sets the Worker
+entry (`worker/index.js`) and serves the built `dist/` folder as static assets.
 
 1. Push this project to a GitHub repository:
 
@@ -78,19 +82,17 @@ npm run dev
    git push -u origin main
    ```
 
-2. In the Cloudflare dashboard: **Workers & Pages -> Create -> Pages ->
-   Connect to Git** and select your repo.
+2. In the Cloudflare dashboard: **Workers & Pages -> Create -> Workers ->
+   Import a repository** (Git) and select your repo. Cloudflare runs
+   `npm run build` then `npx wrangler deploy` using `wrangler.jsonc`.
 
-3. Build settings:
-   - **Framework preset:** Vite
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - Functions in `functions/` are picked up automatically.
+3. Add the secret: project **Settings -> Variables and Secrets** ->
+   add `GEMINI_API_KEY`.
 
-4. Add the secret: project **Settings -> Environment variables** ->
-   add `GEMINI_API_KEY` for both **Production** and **Preview**.
+4. Deploy. Every push to `main` triggers an automatic deployment.
 
-5. Deploy. Every push to `main` triggers an automatic deployment.
+> The `name` in `wrangler.jsonc` (`aivocab`) should match your Worker's name.
+> You can also deploy manually from your machine with `npm run deploy`.
 
 ## Using your own key from the app (no server key needed)
 
@@ -104,7 +106,7 @@ the server key.
 ## Notes
 
 - The Gemini model is set to `gemini-flash-latest` (an always-current alias) in
-  [`functions/api/generate.js`](functions/api/generate.js) and can be changed there.
+  [`src/server/generate.js`](src/server/generate.js) and can be changed there.
   Note: the specific version `gemini-2.5-flash` is blocked for newer API keys, so
   the `-latest` alias is used for reliability.
 - No word list or database is stored; every result is generated on demand.
