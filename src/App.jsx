@@ -239,6 +239,10 @@ export default function App() {
 
       <footer className="app-footer">
         <p>Built for SSC CGL 2026 preparation. Powered by Google Gemini.</p>
+        <p className="credit">
+          Developed by <strong>Mahanthi Rao Seera</strong>
+          <span className="role">Software Developer</span>
+        </p>
       </footer>
     </div>
   );
