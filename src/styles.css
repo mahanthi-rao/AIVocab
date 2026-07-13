@@ -644,13 +644,17 @@ body {
     grid-template-columns: 1fr;
   }
 
-  /* Full-width, comfortable tap targets */
+  /* Two equal-width buttons side by side, sized to fit small screens */
   .buttons {
-    flex-direction: column;
+    flex-direction: row;
+    gap: 10px;
   }
   .btn {
-    width: 100%;
-    padding: 14px 20px;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    padding: 12px 8px;
+    font-size: 0.9rem;
   }
 
   .word-title {
