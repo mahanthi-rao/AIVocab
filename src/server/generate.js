@@ -5,9 +5,14 @@ import {
   DEFAULT_QUESTION_COUNT,
 } from '../prompts.js';
 
-// `gemini-flash-latest` is an always-current alias so the app keeps working as
-// Google rotates model versions. Change this to pin a specific version if needed.
-const MODEL = 'gemini-flash-latest';
+// Free-tier Gemini models tried in order. If one is overloaded (503) or rate
+// limited (429), we automatically fall back to the next. `-lite` is the fastest
+// and least contended, so it goes first to minimize "overloaded" errors.
+const MODELS = [
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-flash-latest',
+];
 const VALID_CATEGORIES = new Set(CATEGORIES.map((c) => c.id));
 const VALID_MODES = new Set(['content', 'test']);
 
@@ -96,7 +101,6 @@ export async function handleGenerate(request, env) {
   if (!VALID_MODES.has(mode)) return json({ error: 'Unknown mode.' }, 400);
 
   const prompt = buildPrompt(word, category, mode, count);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
   // Give the thinking model enough room; scale with the number of questions.
   const maxOutputTokens =
@@ -120,11 +124,21 @@ export async function handleGenerate(request, env) {
     }),
   };
 
-  let geminiRes;
-  try {
-    geminiRes = await fetchGeminiWithRetry(url, requestOptions);
-  } catch {
-    return json({ error: 'Could not reach the Gemini API. Please try again.' }, 502);
+  // Try each model with retries; fall back to the next model on overload (503)
+  // or rate limit (429). Stop early on other errors (e.g. invalid key).
+  let geminiRes = null;
+  for (const model of MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    let res;
+    try {
+      res = await fetchGeminiWithRetry(url, requestOptions, 3);
+    } catch {
+      continue; // network failure: try the next model
+    }
+    geminiRes = res;
+    if (res && res.ok) break;
+    // Only fall back to another model when this one is overloaded/rate limited.
+    if (res && res.status !== 503 && res.status !== 429) break;
   }
 
   if (!geminiRes || !geminiRes.ok) {

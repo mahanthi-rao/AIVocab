@@ -105,8 +105,10 @@ the server key.
 
 ## Notes
 
-- The Gemini model is set to `gemini-flash-latest` (an always-current alias) in
-  [`src/server/generate.js`](src/server/generate.js) and can be changed there.
-  Note: the specific version `gemini-2.5-flash` is blocked for newer API keys, so
-  the `-latest` alias is used for reliability.
+- The app tries free-tier Gemini models in order (`gemini-2.5-flash-lite`,
+  `gemini-2.0-flash`, `gemini-flash-latest`) in
+  [`src/server/generate.js`](src/server/generate.js). If one is overloaded (503)
+  or rate limited (429) after retries, it automatically falls back to the next,
+  which greatly reduces "Gemini is busy" errors. Edit the `MODELS` list to change
+  or reorder models.
 - No word list or database is stored; every result is generated on demand.
