@@ -5,15 +5,20 @@ import {
   DEFAULT_QUESTION_COUNT,
 } from '../prompts.js';
 
-// Free-tier Gemini models tried in order. If one is overloaded (503) or rate
-// limited (429), we automatically fall back to the next. `-lite` is the fastest
-// and least contended, so it goes first to minimize "overloaded" errors.
+// Free-tier Gemini models tried in order. If one is overloaded (503), rate
+// limited (429), or unavailable to this key (404), we automatically fall back to
+// the next. Lite/alias models go first: they are fast, least contended, and
+// available to newer API keys (the pinned `gemini-2.5-*` names are not).
 const MODELS = [
-  'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-2.0-flash-lite',
   'gemini-2.0-flash',
   'gemini-flash-latest',
 ];
 const VALID_CATEGORIES = new Set(CATEGORIES.map((c) => c.id));
+
+// Statuses where trying a different model may help.
+const FALLBACK_STATUSES = new Set([404, 429, 503]);
 const VALID_MODES = new Set(['content', 'test']);
 
 function json(body, status = 200) {
@@ -137,8 +142,9 @@ export async function handleGenerate(request, env) {
     }
     geminiRes = res;
     if (res && res.ok) break;
-    // Only fall back to another model when this one is overloaded/rate limited.
-    if (res && res.status !== 503 && res.status !== 429) break;
+    // Only fall back to another model when this one is overloaded, rate limited,
+    // or unavailable (404). Other errors (e.g. invalid key) stop immediately.
+    if (res && !FALLBACK_STATUSES.has(res.status)) break;
   }
 
   if (!geminiRes || !geminiRes.ok) {
